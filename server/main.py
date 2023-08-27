@@ -1,9 +1,11 @@
 #!/usr/bin/python3
+import collections
 import dataclasses
 import json
 import pathlib
 import pprint
 import random
+from typing import Dict
 from typing import List
 from typing import Tuple
 
@@ -26,39 +28,15 @@ class Client:
         self.coord = coord
         self.session = requests.Session()
     
-    def make_step(self, apple_pos: Coord, field: List[List[str]]) -> None:
+    def make_step(self, apple_pos: Coord) -> None:
         coord_x = self.coord.x
         coord_y = self.coord.y
-
-        # if coord_y - 1 >= 0:
-        #     up_cell = field[coord_x][coord_y - 1]
-        # else:
-        #     up_cell = 'X'
-
-        # if coord_y + 1 >= 0:
-        #     down_cell = field[coord_x][coord_y + 1]
-        # else:
-        #     down_cell = 'X'
-
-        # if coord_x - 1 >= 0:
-        #     left_cell = field[coord_x - 1][coord_y]
-        # else:
-        #     left_cell = 'X'
-
-        # if coord_x + 1 >= 0:
-        #     right_cell = field[coord_x + 1][coord_y]
-        # else:
-        #     right_cell = 'X'
 
         params = {
             'coord_x': coord_x,
             'coord_y': coord_y,
             'apple_pos_x': apple_pos.x,
             'apple_pos_y': apple_pos.y,
-            # 'up_cell': up_cell,
-            # 'down_cell': down_cell
-            # 'left_cell': left_cell,
-            # 'right_cell': right_cell,
         }
         result = self.session.get(self.address, params=params)
         result.raise_for_status()
@@ -92,7 +70,7 @@ class Game:
         self,
         field: List[List[str]],
         ticks_remained: int,
-        clients: List[Client],
+        clients: Dict[int, Client],
         apple_pos: Coord,
     ) -> None:
         self.field = field
@@ -110,32 +88,48 @@ class Game:
         print('-' * 50)
     
     def make_step(self) -> None:
-        # TODO: support several clients handling
-        assert len(self.clients) == 1
-
         self.ticks_remained -= 1
-        client = self.clients[0]
 
-        new_coord = client.make_step(self.apple_pos, self.field)
+        next_pos_by_clients = collections.defaultdict(list)
+        for client in self.clients.values():
+            next_pos = client.make_step(self.apple_pos)
+            next_pos_by_clients[next_pos].append(client.id)
 
-        self.field[client.coord.x][client.coord.y] = '_'
-        client.coord = new_coord
-        self.field[client.coord.x][client.coord.y] = str(client.id)
+        for next_pos, client_ids in next_pos_by_clients.items():
+            if len(client_ids) == 1:
+                client = self.clients[client_ids[0]]
+                if self.field[client.coord.x][client.coord.y] == str(client_ids[0]):
+                    self.field[client.coord.x][client.coord.y] = '_'
+                client.coord = next_pos
+                self.field[client.coord.x][client.coord.y] = str(client.id)
+            else:
+                for client_id in client_ids:
+                    client = self.clients[client_id]
+                    while True:
+                        next_pos = self._find_new_position()
+                        if next_pos not in next_pos_by_clients:
+                            break
+                    if self.field[client.coord.x][client.coord.y] == str(client_id):
+                        self.field[client.coord.x][client.coord.y] = '_'
+                    client.coord = next_pos
+                    self.field[client.coord.x][client.coord.y] = str(
+                        client.id,
+                    )
 
-        if new_coord == self.apple_pos:
-            self._find_new_apple_position()
-    
-    def _find_new_apple_position(self) -> None:
+        if self.apple_pos in next_pos_by_clients:
+            if self.field[self.apple_pos.x][self.apple_pos.y] == 'A':
+                self.field[self.apple_pos.x][self.apple_pos.y] = '_'
+            self.apple_pos = self._find_new_position()
+            self.field[self.apple_pos.x][self.apple_pos.y] = 'A'
+                    
+    def _find_new_position(self) -> Coord:
         while True:
             new_x = random.randint(0, len(self.field) - 1)
             new_y = random.randint(0, len(self.field[0]) - 1)
             if self.field[new_x][new_y] != '_':
                 continue
-            self.field[new_x][new_y] = 'A'
             break
-        self.apple_pos = Coord(new_x, new_y)
-
-
+        return Coord(new_x, new_y)
 
 
 def main() -> None:
@@ -174,7 +168,7 @@ def create_game(config: GameConfig) -> Game:
         raise Exception('players_number is higher than number of starting positions!')
 
     step = bound // players_number
-    clients = []
+    clients = {}
     for player_id, player in enumerate(range(0, bound, step)):
         if player_id >= players_number:
             break
@@ -183,9 +177,9 @@ def create_game(config: GameConfig) -> Game:
             second_coord = player
         elif width <= player < width + height - 2:
             first_coord = player - width + 1
-            second_coord = -1
+            second_coord = width - 1
         elif width + height - 2 <= player < 2 * width + height - 2:
-            first_coord = -1
+            first_coord = height - 1
             second_coord = 2 * width + height - 3 - player
         else:
             first_coord = 2 * width + 2 * height - 4 - player
@@ -193,9 +187,11 @@ def create_game(config: GameConfig) -> Game:
         client_coord = Coord(first_coord, second_coord)
         field[client_coord.x][client_coord.y] = str(player_id)
 
-        client_address = 'http://' + config.hostname + ':' + str(config.start_port + player_id)
+        client_address = (
+            'http://' + config.hostname + ':' + str(config.start_port + player_id)
+        )
         client = Client(player_id, client_address, client_coord)
-        clients.append(client)
+        clients[player_id] = client
 
     apple_pos = Coord(height // 2, width // 2)
     field[apple_pos.x][apple_pos.y] = 'A'

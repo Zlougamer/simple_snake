@@ -8,7 +8,6 @@ UP = 'up'
 DOWN = 'down'
 LEFT = 'left'
 RIGHT = 'right'
-HOLD = 'hold'
 
 
 class HttpGetHandler(http_server.BaseHTTPRequestHandler):
@@ -34,15 +33,7 @@ def run_server(port: int) -> None:
       httpd.server_close()
 
 
-# def make_decision(client_id: int, field: List[List[str]]) -> str:
 def make_decision(query) -> str:
-    # up_cell = query['up_cell']
-    # down_cell = query['down_cell']
-    # left_cell = query['left_cell']
-    # right_cell = query['right_cell']
-    # if '_' not in (up_cell, down_cell, left_cell, right_cell):
-        # return HOLD
-
     apple_pos_x = query['apple_pos_x']
     apple_pos_y = query['apple_pos_y']
     coord_x = query['coord_x']
@@ -61,8 +52,6 @@ def make_decision(query) -> str:
             return DOWN
         else:
             return UP
-
-    return HOLD
 
 
 if __name__ == '__main__':
