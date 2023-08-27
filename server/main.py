@@ -30,35 +30,11 @@ class Client:
         coord_x = self.coord.x
         coord_y = self.coord.y
 
-        # if coord_y - 1 >= 0:
-        #     up_cell = field[coord_x][coord_y - 1]
-        # else:
-        #     up_cell = 'X'
-
-        # if coord_y + 1 >= 0:
-        #     down_cell = field[coord_x][coord_y + 1]
-        # else:
-        #     down_cell = 'X'
-
-        # if coord_x - 1 >= 0:
-        #     left_cell = field[coord_x - 1][coord_y]
-        # else:
-        #     left_cell = 'X'
-
-        # if coord_x + 1 >= 0:
-        #     right_cell = field[coord_x + 1][coord_y]
-        # else:
-        #     right_cell = 'X'
-
         params = {
             'coord_x': coord_x,
             'coord_y': coord_y,
             'apple_pos_x': apple_pos.x,
             'apple_pos_y': apple_pos.y,
-            # 'up_cell': up_cell,
-            # 'down_cell': down_cell
-            # 'left_cell': left_cell,
-            # 'right_cell': right_cell,
         }
         result = self.session.get(self.address, params=params)
         result.raise_for_status()
@@ -193,7 +169,12 @@ def create_game(config: GameConfig) -> Game:
         client_coord = Coord(first_coord, second_coord)
         field[client_coord.x][client_coord.y] = str(player_id)
 
-        client_address = 'http://' + config.hostname + ':' + str(config.start_port + player_id)
+        client_address = (
+            'http://' + 
+            config.hostname + 
+            ':' + 
+            str(config.start_port + player_id)
+            )
         client = Client(player_id, client_address, client_coord)
         clients.append(client)
 
