@@ -8,5 +8,5 @@
         "hostname": "localhost",
         "start_port": 8000
     },
-    "ticks": 20
+    "ticks": 10
 }

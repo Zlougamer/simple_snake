@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import collections
+import concurrent.futures
 import dataclasses
 import json
 import pathlib
@@ -28,7 +29,7 @@ class Client:
         self.coord = coord
         self.session = requests.Session()
     
-    def make_step(self, apple_pos: Coord) -> None:
+    def make_step(self, apple_pos: Coord) -> Tuple[Coord, int]:
         coord_x = self.coord.x
         coord_y = self.coord.y
 
@@ -51,7 +52,7 @@ class Client:
             new_coord = Coord(coord_x, coord_y + 1)
         else:
             raise Exception('Wrong direction')
-        return new_coord
+        return new_coord, self.id
 
 
 @dataclasses.dataclass(frozen=True)
@@ -91,9 +92,13 @@ class Game:
         self.ticks_remained -= 1
 
         next_pos_by_clients = collections.defaultdict(list)
-        for client in self.clients.values():
-            next_pos = client.make_step(self.apple_pos)
-            next_pos_by_clients[next_pos].append(client.id)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = []
+            for client in self.clients.values():
+                futures.append(executor.submit(client.make_step, apple_pos=self.apple_pos))
+            for future in concurrent.futures.as_completed(futures):
+                new_pos, _id = future.result()
+                next_pos_by_clients[new_pos].append(_id)
 
         for next_pos, client_ids in next_pos_by_clients.items():
             if len(client_ids) == 1:
