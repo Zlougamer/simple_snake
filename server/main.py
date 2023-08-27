@@ -1,6 +1,7 @@
 #!/usr/bin/python3
+import aiohttp
+import asyncio
 import collections
-import concurrent.futures
 import dataclasses
 import json
 import pathlib
@@ -27,9 +28,8 @@ class Client:
         self.id = _id
         self.address = address
         self.coord = coord
-        self.session = requests.Session()
     
-    def make_step(self, apple_pos: Coord) -> Tuple[Coord, int]:
+    async def make_step(self, apple_pos: Coord) -> Tuple[Coord, int]:
         coord_x = self.coord.x
         coord_y = self.coord.y
 
@@ -39,9 +39,10 @@ class Client:
             'apple_pos_x': apple_pos.x,
             'apple_pos_y': apple_pos.y,
         }
-        result = self.session.get(self.address, params=params)
-        result.raise_for_status()
-        direction = result.json()['direction']
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self.address, params=params) as resp:
+                resp.raise_for_status()
+                direction = (await resp.json())['direction']
         if direction == 'up':
             new_coord = Coord(coord_x + 1, coord_y)
         elif direction == 'down':
@@ -88,17 +89,17 @@ class Game:
         pprint.pprint(self.field[::-1][:])
         print('-' * 50)
     
-    def make_step(self) -> None:
+    async def make_step(self) -> None:
         self.ticks_remained -= 1
 
         next_pos_by_clients = collections.defaultdict(list)
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = []
-            for client in self.clients.values():
-                futures.append(executor.submit(client.make_step, apple_pos=self.apple_pos))
-            for future in concurrent.futures.as_completed(futures):
-                new_pos, _id = future.result()
-                next_pos_by_clients[new_pos].append(_id)
+
+        results = await asyncio.gather(
+            *(client.make_step(self.apple_pos) for client in self.clients.values())
+        )
+        for result in results:
+            new_pos, _id = result
+            next_pos_by_clients[new_pos].append(_id)
 
         for next_pos, client_ids in next_pos_by_clients.items():
             if len(client_ids) == 1:
@@ -142,9 +143,10 @@ def main() -> None:
     config = read_configuration()
     game = create_game(config)
     game.show_field()
+    loop = asyncio.get_event_loop()
 
     while game.is_continues():
-        game.make_step()
+        loop.run_until_complete(game.make_step())
         game.show_field()
     print('Snake Game is over!')
 
