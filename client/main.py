@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import argparse
 from http import server as http_server
+import random
 from typing import List
 import urllib.parse
 
@@ -36,23 +37,49 @@ def run_server(port: int) -> None:
 def make_decision(query) -> str:
     apple_pos_x = query['apple_pos_x']
     apple_pos_y = query['apple_pos_y']
-    coord_x = query['coord_x']
-    coord_y = query['coord_y']
+    head_x = query['head_x']
+    head_y = query['head_y']
+
+    up_head_val = query['up_head_val']
+    down_head_val = query['down_head_val']
+    left_head_val = query['left_head_val']
+    right_head_val = query['right_head_val']
     
-    delta_x = int(coord_x) - int(apple_pos_x)
-    delta_y = int(coord_y) - int(apple_pos_y)
+    delta_x = int(head_x) - int(apple_pos_x)
+    delta_y = int(head_y) - int(apple_pos_y)
 
+    # First, try to shorten distance between head and apple
     if abs(delta_x) < abs(delta_y):
-        if delta_y > 0:
+        if delta_y > 0 and left_head_val == '_':
             return LEFT
-        else:
+        if delta_y < 0 and right_head_val == '_':
             return RIGHT
-    else:
-        if delta_x > 0:
+        if delta_x > 0 and down_head_val == '_':
             return DOWN
-        else:
+        if delta_x < 0 and up_head_val == '_':
             return UP
+    else:
+        if delta_x > 0 and down_head_val == '_':
+            return DOWN
+        if delta_x < 0 and up_head_val == '_':
+            return UP
+        if delta_y > 0 and left_head_val == '_':
+            return LEFT
+        if delta_y < 0 and right_head_val == '_':
+            return RIGHT
+    
+    # Otherwise, try to go to empty place
+    if down_head_val == '_':
+        return DOWN
+    if up_head_val == '_':
+        return UP
+    if left_head_val == '_':
+        return LEFT
+    if right_head_val == '_':
+        return RIGHT
 
+    # Finally, go somewhere
+    return random.choice([UP, DOWN, LEFT, RIGHT])
 
 if __name__ == '__main__':
     print('I am a client to Snake Game!')
