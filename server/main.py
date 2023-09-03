@@ -15,6 +15,7 @@ import requests
 GAME_CONFIG_PATH = pathlib.Path(__file__).parent / 'game_config.json'
 SNAKE_START_SEP = 4
 NEW_SNAKE_LEN = SNAKE_START_SEP - 1
+REQ_TIMEOUT = 1
 
 @dataclasses.dataclass(frozen=True)
 class Coord:
@@ -52,7 +53,9 @@ class Client:
             'left_head_val': neighbor.left,
             'right_head_val': neighbor.right,
         }
-        result = self.session.get(self.address, params=params)
+        result = self.session.get(
+            self.address, params=params, timeout=REQ_TIMEOUT,
+            )
         result.raise_for_status()
         direction = result.json()['direction']
         if direction == 'up':
@@ -168,7 +171,7 @@ class Game:
         for _id, next_pos in next_pos_by_snake.items():
             if next_pos == self.apple_pos:
                 is_apple_eaten = True
-                self.snakes[_id].restore_tail()  # bug with ids
+                self.snakes[_id].restore_tail()
         if is_apple_eaten:
             self.apple_pos = self._find_new_position()
 
@@ -227,7 +230,7 @@ class Game:
                 if coord == snake_coord:
                     return 'S'
         return '_'
-
+    
     def _find_new_position(self) -> Coord:
         while True:
             new_x = random.randint(0, self.field_height - 1)
@@ -236,6 +239,18 @@ class Game:
                 continue
             break
         return Coord(new_x, new_y)
+
+    def show_winner(self) -> None:
+        winner_id = -1
+        winner_len = 0
+        for snake in self.snakes:
+            if snake.len > winner_len:
+                winner_len = snake.len
+                winner_id = snake.id
+        print(
+            f'Snake with id {winner_id} and '
+            f'length {winner_len} won the game!',
+        )
 
 
 def main() -> None:
@@ -247,6 +262,7 @@ def main() -> None:
     while game.is_continues():
         game.make_step()
         game.show_field()
+    game.show_winner()
     print('Snake Game is over!')
 
 

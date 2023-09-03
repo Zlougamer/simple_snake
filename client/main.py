@@ -2,6 +2,7 @@
 import argparse
 from http import server as http_server
 import random
+import time
 from typing import List
 import urllib.parse
 
@@ -10,10 +11,24 @@ DOWN = 'down'
 LEFT = 'left'
 RIGHT = 'right'
 
+SERVER_ERRORS = [500, 502, 503, 504, 507, 510, 429]
+SERVER_ERR_PROBS = [10, 8, 8, 5, 3 ,1, 1]
+SLEEP_TIME = 2
 
 class HttpGetHandler(http_server.BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
+        if random.randrange(10) == 0:  # Generate non-200 response
+            random_error = random.choices(
+                SERVER_ERRORS, SERVER_ERR_PROBS, k=1,
+            )[0]
+            self.send_response(random_error)
+            return 
+            
+        if random.randrange(10) == 0:  # Provide a request timeout
+            time.sleep(SLEEP_TIME)
+            return 
+            
         res = urllib.parse.urlparse(self.path)
         query = dict(urllib.parse.parse_qsl(res.query))
         direction = make_decision(query)
