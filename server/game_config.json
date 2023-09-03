@@ -1,12 +1,12 @@
 {
     "field": {
-        "height": 5,
-        "width": 10
+        "height": 4,
+        "width": 8
     },
     "players": {
-        "number": 1,
+        "number": 2,
         "hostname": "localhost",
         "start_port": 8000
     },
-    "ticks": 10
+    "ticks": 25
 }

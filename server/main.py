@@ -6,6 +6,7 @@ import pathlib
 import pprint
 import random
 from typing import List
+from typing import Optional
 from typing import Tuple
 
 import requests
@@ -14,7 +15,6 @@ import requests
 GAME_CONFIG_PATH = pathlib.Path(__file__).parent / 'game_config.json'
 SNAKE_START_SEP = 4
 NEW_SNAKE_LEN = SNAKE_START_SEP - 1
-NEIGHBOR_WINDOW = 3
 
 @dataclasses.dataclass(frozen=True)
 class Coord:
@@ -55,9 +55,6 @@ class Client:
         result = self.session.get(self.address, params=params)
         result.raise_for_status()
         direction = result.json()['direction']
-        print('^'*35)
-        print('direction: ', direction)
-        print('$'*35)
         if direction == 'up':
             new_coord = Coord(head_x + 1, head_y)
         elif direction == 'down':
@@ -79,10 +76,29 @@ class Snake:
         self.id = _id
         self.body_coords = body_coords
         self.client = client
+        self.backup_tail: Optional[Coord] = None
+        self.len = NEW_SNAKE_LEN
     
     @property
     def head(self) -> Coord:
         return self.body_coords[-1]
+
+    def move_snake(self, new_coord: Coord) -> None:
+        self.body_coords.append(new_coord)
+        if len(self.body_coords) > self.len:
+            self.backup_tail = self.body_coords.popleft()
+
+    def restore_tail(self) -> None:
+        if self.backup_tail:
+            self.body_coords.appendleft(self.backup_tail)
+        self.len += 1
+        self.backup_tail = None
+
+    def kill_and_rebirth_snake(self, coord: Coord) -> None:
+        self.body_coords.clear()
+        self.backup_tail = None
+        self.body_coords.append(coord)
+        self.len = NEW_SNAKE_LEN
 
 
 @dataclasses.dataclass(frozen=True)
@@ -111,7 +127,6 @@ class Game:
         self.field_width=field_width
         self.field_height=field_height
 
-    
     def is_continues(self) -> bool:
         return self.ticks_remained > 0
 
@@ -123,7 +138,14 @@ class Game:
         field[self.apple_pos.x][self.apple_pos.y] = 'A'
         for snake in self.snakes:
             for coord in snake.body_coords:
-                field[coord.x][coord.y] = str(snake.id)
+                try:
+                    field[coord.x][coord.y] = str(snake.id)
+                except AttributeError:
+                    print('snake')
+                    print('id: ', snake.id)
+                    print('snake.body_coords: ', snake.body_coords)
+                    print('snake.backup_tail: ', snake.backup_tail)
+                    raise
             coord = snake.head
             field[coord.x][coord.y] = 'H'
 
@@ -132,22 +154,49 @@ class Game:
         print('-' * 50)
     
     def make_step(self) -> None:
-        # TODO: support several snakes handling
-        assert len(self.snakes) == 1
-
         self.ticks_remained -= 1
-        snake = self.snakes[0]
-        head = snake.head
-        
-        neighborhood = self._get_point_neighborhood(head)
-        new_coord = snake.client.make_step(self.apple_pos, head, neighborhood)
+        next_pos_by_snake = {}
 
-        if new_coord == self.apple_pos:
-            self._find_new_apple_position()
-        else:
-            snake.body_coords.popleft()
-        snake.body_coords.append(new_coord)
-    
+        for snake in self.snakes:
+            head = snake.head
+            neighborhood = self._get_point_neighborhood(head)
+            next_pos = snake.client.make_step(self.apple_pos, head, neighborhood)
+            next_pos_by_snake[snake.id] = next_pos
+            snake.move_snake(next_pos)
+
+        is_apple_eaten = False
+        for _id, next_pos in next_pos_by_snake.items():
+            if next_pos == self.apple_pos:
+                is_apple_eaten = True
+                self.snakes[_id].restore_tail()  # bug with ids
+        if is_apple_eaten:
+            self.apple_pos = self._find_new_position()
+
+        should_kill_snake = {snake.id: False for snake in self.snakes}
+        for _id, next_pos in next_pos_by_snake.items():
+            for snake in self.snakes:
+                if snake.id == _id:
+                    if next_pos in list(snake.body_coords)[:-1]:
+                        should_kill_snake[_id] = True
+                        break
+                    continue
+                if next_pos in snake.body_coords:
+                    should_kill_snake[_id] = True
+                    break
+            if (
+                next_pos.x < 0 or 
+                next_pos.x >= self.field_height or 
+                next_pos.y < 0 or 
+                next_pos.y >= self.field_width
+            ):
+                should_kill_snake[_id] = True                
+
+        for _id, kill_snake in should_kill_snake.items():
+            if not kill_snake:
+                continue
+            rebirth_position = self._find_new_position()
+            self.snakes[_id].kill_and_rebirth_snake(rebirth_position)
+
     def _get_point_neighborhood(self, head: Coord) -> Neighborhood:
         up_coord = Coord(x=head.x + 1, y=head.y)
         up = self._get_field_element_by_coord(up_coord)
@@ -179,14 +228,14 @@ class Game:
                     return 'S'
         return '_'
 
-    def _find_new_apple_position(self) -> None:
+    def _find_new_position(self) -> Coord:
         while True:
             new_x = random.randint(0, self.field_height - 1)
             new_y = random.randint(0, self.field_width - 1)
             if self._get_field_element_by_coord(Coord(new_x, new_y)) != '_':
                 continue
-            self.apple_pos = Coord(new_x, new_y)
             break
+        return Coord(new_x, new_y)
 
 
 def main() -> None:
@@ -267,7 +316,6 @@ def _point_to_coord(point: int, width: int, height: int) -> Coord:
             first_coord = 2 * width + 2 * height - 4 - point
             second_coord = 0
         return Coord(first_coord, second_coord)
-
 
 
 if __name__ == '__main__':
